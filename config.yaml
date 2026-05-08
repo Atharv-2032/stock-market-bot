@@ -1,0 +1,31 @@
+scout:
+  run_interval_hours: 4
+  min_sharpe: 0.3
+  min_trades: 5
+  min_signals: 1
+  top_n_traders: 20
+  scoring_window_days: 90
+
+watchdog:
+  poll_interval_seconds: 180
+  min_insider_buy_value: 50000
+  min_options_premium: 25000
+  min_option_contracts: 500
+  unusual_options_volume_threshold: 3.0
+
+analyst:
+  max_price_drift: 0.05
+  min_conviction_score: 0.05
+  max_market_impact: 0.02
+  min_signals_required: 1
+
+executor:
+  execution_mode: observe
+  budget_per_trade: 100
+  max_open_positions: 5
+  daily_loss_limit: 300
+  stop_loss_pct: 0.07
+  take_profit_pct: 0.15
+
+notifications:
+  telegram_enabled: false
