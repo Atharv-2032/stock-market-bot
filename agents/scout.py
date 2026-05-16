@@ -233,24 +233,50 @@ def upsert_candidate(trader_id: str, name: str, source: str, ticker: str, scores
     finally:
         session.close()
 
-def update_leaderboard(config:dict)-> None:
+def update_leaderboard(config: dict) -> None:
     top_n = config["scout"]["top_n_traders"]
     min_sharpe = config["scout"]["min_sharpe"]
     min_trades = config["scout"]["min_trades"]
 
     session = get_session()
     try:
+        # hall of fame — proven traders never removed
+        hall_of_fame = session.query(CandidateTrader).filter(
+            CandidateTrader.times_seen >= 10,
+            CandidateTrader.sharpe >= 1.0,
+            CandidateTrader.status != "eliminated"
+        ).all()
+
+        hall_of_fame_ids = {c.id for c in hall_of_fame}
+        logger.info(f"Hall of fame traders: {len(hall_of_fame_ids)}")
+
+        # regular candidates passing thresholds
         candidates = session.query(CandidateTrader).filter(
-            CandidateTrader.status =="candidate",
+            CandidateTrader.status == "candidate",
             CandidateTrader.sharpe >= min_sharpe,
             CandidateTrader.total_signals >= min_trades
-
         ).order_by(CandidateTrader.sharpe.desc()).limit(top_n).all()
-        if not candidates:
-            logger.warning("No candidates passed thresholds — leaderboard not updated")
+
+        # combine hall of fame with regular candidates
+        all_candidate_ids = {c.id for c in candidates}
+        combined = list(candidates)
+
+        for hof in hall_of_fame:
+            if hof.id not in all_candidate_ids:
+                combined.append(hof)
+                logger.info(f"Hall of fame preserved: {hof.ticker} — sharpe: {hof.sharpe} | times_seen: {hof.times_seen}")
+
+        # sort combined by sharpe
+        combined.sort(key=lambda x: x.sharpe, reverse=True)
+        combined = combined[:top_n]
+
+        if not combined:
+            logger.warning("No candidates found — leaderboard not updated")
             return
+
         session.query(Trader).delete()
-        for c in candidates:
+
+        for c in combined:
             session.add(Trader(
                 id=c.id,
                 name=c.name,
@@ -264,8 +290,9 @@ def update_leaderboard(config:dict)-> None:
                 last_updated=datetime.now(timezone.utc)
             ))
             c.status = "top20"
+
         session.commit()
-        logger.info(f"Leaderboard updated with {len(candidates)} traders")
+        logger.info(f"Leaderboard updated with {len(combined)} traders")
 
     except Exception as e:
         session.rollback()

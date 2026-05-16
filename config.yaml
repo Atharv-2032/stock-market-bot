@@ -11,13 +11,14 @@ watchdog:
   min_insider_buy_value: 50000
   min_options_premium: 25000
   min_option_contracts: 500
-  unusual_options_volume_threshold: 3.0
+  unusual_options_volume_threshold: 1.5
 
 analyst:
   max_price_drift: 0.05
-  min_conviction_score: 0.05
+  min_conviction_score: 0.0001
   max_market_impact: 0.02
   min_signals_required: 1
+  min_options_ratio: 1.5
 
 executor:
   execution_mode: observe

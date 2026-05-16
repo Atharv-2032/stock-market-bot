@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import re
 from utils.logger import logger
+from core.sec import parse_filing_date
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -41,6 +42,54 @@ def get_top_traders_from_openinsider() -> list:
         return traders
     except Exception as e:
         logger.error(f"Error fetching OpenInsider data: {e}")
+        return []
+def get_finviz_insider_trades() -> list:
+    try:
+        url = "https://finviz.com/insidertrading.ashx"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml",
+            "Referer": "https://finviz.com",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        table = soup.find("table", {"class": "styled-table-new"})
+        if not table:
+            logger.warning("Finviz insider table not found")
+            return []
+
+        trades = []
+        rows = table.find_all("tr")[1:]
+        for row in rows:
+            cols = [td.text.strip() for td in row.find_all("td")]
+            if len(cols) < 9:
+                continue
+
+            trade_type = cols[4].lower()
+            if "sale" in trade_type or "option" in trade_type:
+                continue
+
+            raw_date = cols[3].strip()
+            parsed_date = parse_filing_date(raw_date)
+
+            trades.append({
+                "ticker": cols[0].strip(),
+                "insider_name": cols[1].strip(),
+                "title": cols[2].strip(),
+                "trade_date": parsed_date.strftime("%Y-%m-%d") if parsed_date else raw_date,
+                "trade_type": cols[4].strip(),
+                "price": cols[5].strip(),
+                "quantity": cols[6].strip(),
+                "value": cols[7].strip(),
+                "source": "finviz"
+            })
+
+        logger.info(f"Fetched {len(trades)} insider trades from Finviz")
+        return trades
+    except Exception as e:
+        logger.error(f"Error fetching Finviz insider trades: {e}")
         return []
 def get_congress_trades() -> list:
     try:
@@ -118,6 +167,9 @@ def get_all_portfolio_signals() -> list:
     all_signals = []
     openinsider = get_top_traders_from_openinsider()
     all_signals.extend(openinsider)
+
+    finviz = get_finviz_insider_trades()
+    all_signals.extend(finviz)
     #congress = get_congress_trades()
     #all_signals.extend(congress)
     #senate = get_politician_trades()

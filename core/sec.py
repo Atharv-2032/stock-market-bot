@@ -78,21 +78,35 @@ def get_form4_rss_feed() -> list:
    
 def parse_filing_date(date_str: str) -> datetime | None:
     try:
+        if not date_str:
+            return None
+
+        date_str = date_str.strip()
+
+        # handle Finviz format: "May 11 '26" → "May 11 26"
+        date_str_clean = date_str.replace("'", "")
+
         formats = [
             "%Y-%m-%dT%H:%M:%S%z",
             "%Y-%m-%d",
-            "%a, %d %b %Y %H:%M:%S %z"
+            "%a, %d %b %Y %H:%M:%S %z",
+            "%b %d %y",
+            "%B %d %y",
+            "%m/%d/%Y",
+            "%d-%b-%Y",
         ]
+
         for fmt in formats:
             try:
-                return datetime.strptime(date_str, fmt).replace(tzinfo=None)
+                return datetime.strptime(date_str_clean, fmt).replace(tzinfo=None)
             except ValueError:
                 continue
+
+        logger.warning(f"Could not parse date: {date_str}")
         return None
     except Exception as e:
         logger.error(f"Error parsing date {date_str}: {e}")
         return None
-
 
 def extract_ticker_from_filing(filing: dict) -> str | None:
     try:

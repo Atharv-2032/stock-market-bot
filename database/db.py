@@ -100,6 +100,12 @@ class CandidateTrader(Base):
     price_at_signal = Column(Float, nullable=True)
     historical_returns = Column(Text, nullable=True)
 
+class WatchdogState(Base):
+    
+        __tablename__ = "watchdog_state"
+        ticker = Column(String, primary_key=True)  # changed from trader_id
+        last_checked = Column(DateTime, default=datetime.now)
+        last_signal_time = Column(DateTime, nullable=True)
 
 def init_db():
     Base.metadata.create_all(engine)

@@ -1,8 +1,11 @@
-import yaml
-import os
+from pathlib import Path
 from dotenv import load_dotenv
+import os
+import yaml
 
-load_dotenv()
+# explicitly load from project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path, override=True)
 
 def load_config():
     with open("config.yaml", "r") as f:
