@@ -9,6 +9,7 @@ from core.risk import (
 from utils.config import load_config
 from utils.logger import logger
 import json
+import time
 
 
 def get_trade_verdicts() -> list:
@@ -302,6 +303,7 @@ def check_open_positions(config: dict) -> None:
             current_price = get_stock_price(position.ticker)
             if not current_price:
                 continue
+            time.sleep(0.5)
 
             update_position_price(position.ticker, current_price)
 
@@ -335,19 +337,71 @@ def check_open_positions(config: dict) -> None:
 
 
 def run_executor_verdicts() -> None:
+    from agents.analyst import analyse_signal
     config = load_config()
     verdicts = get_trade_verdicts()
     if not verdicts:
         logger.info("Executor — no new TRADE verdicts")
         return
+
     for verdict in verdicts:
         try:
+            # check position limit before re-analysing
+            open_count = get_open_position_count()
+            if open_count >= config["executor"]["max_open_positions"]:
+                logger.info(f"Max positions reached — stopping")
+                break
+
+            # re-run analyst on the signal before executing
+            session = get_session()
+            try:
+                signal = session.query(Signal).filter_by(
+                    id=verdict["signal_id"]
+                ).first()
+                if not signal:
+                    continue
+                signal_dict = {
+                    "id": signal.id,
+                    "trader_id": signal.trader_id,
+                    "ticker": signal.ticker,
+                    "signal_type": signal.signal_type,
+                    "direction": signal.direction,
+                    "size": signal.size,
+                    "price_at_signal": signal.price_at_signal,
+                    "source": signal.source,
+                    "raw_data": json.loads(signal.raw_data) if signal.raw_data else {},
+                    "timestamp": signal.timestamp
+                }
+            finally:
+                session.close()
+
+            logger.info(f"Re-analysing signal {signal.id} — {signal.ticker} before execution")
+            fresh_verdict = analyse_signal(signal_dict, config)
+
+            if fresh_verdict != "TRADE":
+                logger.info(f"Signal {signal.id} re-analysis returned {fresh_verdict} — skipping")
+                continue
+
+            # fresh verdict is still TRADE — execute
             execute_trade(verdict, config)
+
         except Exception as e:
             logger.error(f"Error executing trade for {verdict['ticker']}: {e}")
 
 
 def run_position_monitor() -> None:
+    from datetime import datetime, timezone, timedelta
+
+    # check if US market is open (9:30am - 4:00pm ET = 7:00pm - 1:30am IST)
+    now_utc = datetime.now(timezone.utc)
+    now_et_hour = (now_utc.hour - 4) % 24  # UTC-4 for EDT
+    now_et_minute = now_utc.minute
+
+    market_open = (now_et_hour == 9 and now_et_minute >= 30) or (10 <= now_et_hour <= 15)
+
+    if not market_open:
+        # market closed — no point fetching prices
+        return
     config = load_config()
     check_open_positions(config)
     logger.info("Position monitor complete")
@@ -357,16 +411,15 @@ def run_executor() -> None:
     logger.info("Executor starting")
     config = load_config()
     init_db()
+
     check_open_positions(config)
-    verdicts = get_trade_verdicts()
-    if not verdicts:
-        logger.info("Executor — no new TRADE verdicts")
+
+    open_count = get_open_position_count()
+    if open_count >= config["executor"]["max_open_positions"]:
+        logger.info(f"Max positions reached ({open_count}) — no new trades")
         return
-    for verdict in verdicts:
-        try:
-            execute_trade(verdict, config)
-        except Exception as e:
-            logger.error(f"Error executing trade for {verdict['ticker']}: {e}")
+
+    run_executor_verdicts()
     logger.info("Executor run complete")
 
 
