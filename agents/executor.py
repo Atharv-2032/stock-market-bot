@@ -27,6 +27,16 @@ def get_trade_verdicts() -> list:
             if v.id not in executed_signal_ids:
                 signal = session.query(Signal).filter_by(id=v.signal_id).first()
                 if signal:
+                    type_bonus = 0.3 if signal.signal_type in ["insider_filing", "insider_purchase"] else 0.0
+                    conviction = min(v.conviction_score or 0, 1.0)
+                    count_bonus = min((v.signal_count or 1) - 1, 3)  # 0, 1, 2, or 3
+
+                    priority = (
+                        v.llm_score * 0.4 +
+                        conviction  * 0.3 +
+                        type_bonus  * 0.2 +
+                        count_bonus * 0.1
+                    )
                     result.append({
                         "verdict_id": v.id,
                         "signal_id": v.signal_id,
@@ -37,10 +47,18 @@ def get_trade_verdicts() -> list:
                         "llm_score": v.llm_score,
                         "llm_reasoning": v.llm_reasoning,
                         "signal_type": signal.signal_type,
+                        "priority":priority,
                         "timestamp": v.timestamp
                     })
 
+        result.sort(key=lambda x: x["priority"], reverse=True)
+
         logger.info(f"Executor found {len(result)} unexecuted TRADE verdicts")
+        if result:
+            logger.info(f"Top 5 by priority:")
+            for r in result[:5]:
+                logger.info(f"  {r['ticker']} | type:{r['signal_type']} | priority:{r['priority']:.3f} | llm:{r['llm_score']:.3f} | conviction:{r['conviction']:.3f}")
+
         return result
     except Exception as e:
         logger.error(f"Error fetching verdicts: {e}")
