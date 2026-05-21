@@ -1,6 +1,8 @@
-venv/
 .env
+*.db
+logs/
 __pycache__/
 *.pyc
-stock_bot.db
-logs/*.log
+venv/
+*.pid
+nohup.out
