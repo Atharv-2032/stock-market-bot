@@ -25,8 +25,8 @@ executor:
   budget_per_trade: 100
   max_open_positions: 20
   daily_loss_limit: 300
-  stop_loss_pct: 0.07
-  take_profit_pct: 0.15
+  stop_loss_pct: 0.03
+  take_profit_pct: 0.05
 
 notifications:
   telegram_enabled: false
